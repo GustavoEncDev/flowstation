@@ -2722,7 +2722,7 @@ impl TetraEntityTrait for MmBs {
                     SapMsgInner::MmRequestLocationUpdate { issi } => {
                         self.rx_request_location_update(queue, issi);
                     }
-                    SapMsgInner::MsRssiUpdate { issi, rssi_dbfs } => {
+                    SapMsgInner::MsRssiUpdate { issi, rssi_dbfs, rssi_dbm } => {
                         self.client_mgr.update_client_rssi(issi, rssi_dbfs);
                         // This RSSI sample proves `issi` is RF-present on the uplink right now. If
                         // MM has no record of it (registry lost to a restart while the radio stayed
@@ -2732,6 +2732,7 @@ impl TetraEntityTrait for MmBs {
                         // Emit RSSI telemetry for dashboard
                         if let Some(sink) = &self.telemetry {
                             sink.send(crate::net_telemetry::TelemetryEvent::MsRssi { issi, rssi_dbfs });
+                            sink.send(crate::net_telemetry::TelemetryEvent::MsRssiDbm { issi, rssi_dbm });
                         }
                         // Forward to Brew entity for optional export to Brew server.
                         // BrewEntity applies its own rate limiting and checks feature_rssi_export.
@@ -2739,7 +2740,7 @@ impl TetraEntityTrait for MmBs {
                             sap: Sap::Control,
                             src: TetraEntity::Mm,
                             dest: TetraEntity::Brew,
-                            msg: SapMsgInner::MsRssiUpdate { issi, rssi_dbfs },
+                            msg: SapMsgInner::MsRssiUpdate { issi, rssi_dbfs, rssi_dbm },
                         });
                     }
                     SapMsgInner::MmSubscriberUpdate(update)
