@@ -32,6 +32,7 @@ pub mod cell_context;
 pub mod health;
 pub mod host_network;
 pub mod rf_status;
+pub mod rssi;
 pub mod service_control;
 pub mod sys_telemetry;
 pub mod tpg2200;
