@@ -78,6 +78,7 @@ pub fn soapy_dto_to_cfg(soapy_dto: SoapySdrDto) -> CfgSoapySdr {
         fs: soapy_dto.sample_rate,
         rx_ch: soapy_dto.rx_channel,
         tx_ch: soapy_dto.tx_channel,
+        rssi_calibration: soapy_dto.rssi_calibration,
         rx_ant: soapy_dto.rx_antenna,
         tx_ant: soapy_dto.tx_antenna,
         rx_gains: soapy_dto
