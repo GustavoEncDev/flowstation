@@ -468,6 +468,7 @@ pub fn visual_config_from_toml(config_path: &str) -> Result<JsonValue, String> {
 /// means “use device defaults” — they must be removed from TOML, not left behind by
 /// deep_merge (which only inserts/overwrites).
 const SOAPY_VISUAL_OPTIONAL: &[&str] = &[
+    "rssi_calibration",
     "rx_gain_lna",
     "rx_gain_pga",
     "rx_gain_tia",
@@ -534,6 +535,11 @@ pub fn write_visual_config(config_path: &str, body: &JsonValue) -> Result<(), St
     let obj = body
         .as_object()
         .ok_or_else(|| "body must be a JSON object".to_string())?;
+    if let Some(profile) = body.pointer("/phy_io/soapysdr/rssi_calibration") {
+        let calibration: tetra_config::bluestation::rssi_calibration::RssiCalibration =
+            serde_json::from_value(profile.clone()).map_err(|e| format!("RSSI calibration: {e}"))?;
+        calibration.validate().map_err(|e| format!("RSSI calibration: {e}"))?;
+    }
     let current = fs::read_to_string(config_path).map_err(|e| e.to_string())?;
     let mut table: toml::Table = toml::from_str(&current).map_err(|e| format!("parse config: {e}"))?;
 
@@ -1251,4 +1257,30 @@ password = "secret"
         fs::create_dir_all(&path).unwrap();
         path
     }
+    #[test]
+    fn visual_rssi_profile_round_trip_clear_and_invalid_does_not_overwrite() {
+        let dir = tempfile_dir();
+        let cfg = dir.join("config.toml");
+        fs::write(&cfg, minimal_toml()).unwrap();
+        let mut visual = visual_config_from_toml(cfg.to_str().unwrap()).unwrap();
+        let profile = serde_json::json!({
+            "receiver":"Lab RX", "device":"driver=sx", "rx_antenna":"RX", "rx_channel":0,
+            "rx_frequency_hz":433025000.0, "rx_center_frequency_hz":433025000.0,
+            "ppm_err":0.0, "sample_rate":600000.0, "rx_gains":{"LNA":42.0,"PGA":16.0},
+            "points":[{"dbfs":-70.0,"dbm":-110.0},{"dbfs":-30.0,"dbm":-70.0}]
+        });
+        visual["phy_io"]["soapysdr"]["rssi_calibration"] = profile.clone();
+        write_visual_config(cfg.to_str().unwrap(), &visual).unwrap();
+        let loaded = visual_config_from_toml(cfg.to_str().unwrap()).unwrap();
+        assert_eq!(loaded["phy_io"]["soapysdr"]["rssi_calibration"], profile);
+        let before = fs::read_to_string(&cfg).unwrap();
+        visual["phy_io"]["soapysdr"]["rssi_calibration"]["points"][1]["dbm"] = serde_json::json!(-150.0);
+        assert!(write_visual_config(cfg.to_str().unwrap(), &visual).is_err());
+        assert_eq!(fs::read_to_string(&cfg).unwrap(), before);
+        visual["phy_io"]["soapysdr"].as_object_mut().unwrap().remove("rssi_calibration");
+        write_visual_config(cfg.to_str().unwrap(), &visual).unwrap();
+        assert!(!fs::read_to_string(&cfg).unwrap().contains("rssi_calibration"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
 }
