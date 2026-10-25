@@ -690,7 +690,7 @@ impl BrewEntity {
 
     /// Handle RSSI update from MM. Forwards to Brew server if feature_rssi_export is enabled,
     /// applying rate limiting (one update per MS every 5 seconds) to avoid flooding the server.
-    fn handle_rssi_update(&mut self, issi: u32, rssi_dbfs: f32) {
+    fn handle_rssi_update(&mut self, issi: u32, rssi_dbfs: f32, rssi_dbm: Option<f32>) {
         let brew_cfg = self.config.config();
         let Some(ref brew) = brew_cfg.brew else {
             return;
@@ -712,7 +712,7 @@ impl BrewEntity {
 
         if should_send {
             self.rssi_last_sent.insert(issi, now);
-            let _ = self.command_sender.send(BrewCommand::SendRssiUpdate { issi, rssi_dbfs });
+            let _ = self.command_sender.send(BrewCommand::SendRssiUpdate { issi, rssi_dbfs, rssi_dbm });
             tracing::debug!("Brew: queued RSSI export issi={} rssi={:.1}dBFS", issi, rssi_dbfs);
         }
     }
@@ -1968,8 +1968,8 @@ impl TetraEntityTrait for BrewEntity {
             SapMsgInner::MmSubscriberUpdate(update) => {
                 self.handle_subscriber_update(update);
             }
-            SapMsgInner::MsRssiUpdate { issi, rssi_dbfs } => {
-                self.handle_rssi_update(issi, rssi_dbfs);
+            SapMsgInner::MsRssiUpdate { issi, rssi_dbfs, rssi_dbm } => {
+                self.handle_rssi_update(issi, rssi_dbfs, rssi_dbm);
             }
             SapMsgInner::CmceSdsData(sds) => {
                 self.handle_sds_send(sds);
