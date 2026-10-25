@@ -5763,6 +5763,13 @@ tbody tr:hover td{background:color-mix(in srgb,var(--bg3) 70%, transparent);}
                       <label class="field vc-hw-row" data-hw="tx-pga"><span><span data-i18n="ui_tx_gain_pga">TX gain PGA</span></span><input type="text" inputmode="decimal" id="vc-tx-pga" class="form-input" data-hw-ex="30" placeholder="e.g. 30 — empty = default" onblur="normalizeHwRfField(this,{allowEmpty:true})" onkeydown="if(event.key==='Enter'){normalizeHwRfField(this,{allowEmpty:true});this.blur();}"></label>
                     </div>
                   </details>
+                  <details class="config-details" style="margin-top:12px">
+                    <summary data-i18n="rssi_cal_title">RSSI calibration (dBm)</summary>
+                    <p class="muted" data-i18n="rssi_cal_help">Use measured RF-input references for this receiver. The station calculates dBm locally and exports it through Brew. Empty disables calibration. Device, antenna, gains, frequency and sample rate must match; no extrapolation.</p>
+                    <label class="field"><span data-i18n="rssi_cal_profile">Receiver calibration profile (JSON)</span><textarea id="vc-rssi-calibration" class="form-input" rows="9" spellcheck="false" aria-label="RSSI calibration profile" data-i18n-aria-label="rssi_cal_profile"></textarea></label>
+                    <button type="button" class="btn btn-sm" onclick="captureRssiReceiver()" data-i18n="rssi_cal_capture">Read receiver settings</button>
+                    <a href="https://github.com/Aitorrio/bost-flowstation/blob/main/Docs/rssi-calibration.md" target="_blank" rel="noopener" data-i18n="rssi_cal_guide">Calibration guide</a>
+                  </details>
                   <div class="config-msg" id="vc-rf-msg"></div>
                 </div>
               </div>
@@ -7176,6 +7183,18 @@ function paintIcons(root){
 // ── i18n ─────────────────────────────────────────────────────────────────
 const LANGS={
   en:{
+    "rssi_cal_capture":"Read receiver settings",
+    "rssi_cal_unavailable":"No current SDR readback is available. Start the receiver before capturing a profile.",
+    "rssi_cal_captured":"Receiver settings captured. Enter the receiver name and measured reference points before saving.",
+
+    "rssi_cal_title":"RSSI calibration (dBm)",
+    "rssi_cal_help":"Use measured RF-input references for this receiver. The station calculates dBm locally and exports it through Brew. Empty disables calibration. Device, antenna, gains, frequency and sample rate must match; no extrapolation.",
+    "rssi_cal_profile":"Receiver calibration profile (JSON)",
+    "rssi_cal_guide":"Calibration guide",
+    "rssi_cal_invalid":"Enter a valid receiver calibration JSON object, or leave empty.",
+    "rssi_cal_value":"Calibrated uplink RSSI",
+    "rssi_cal_missing":"Digital level: no valid RF-input calibration for this sample",
+
     "ui_monitor":"MONITOR",
     "ui_toggle_sidebar":"Toggle sidebar",
     "ui_text_size":"Text size",
@@ -8597,6 +8616,18 @@ const LANGS={
   },
 // Portuguese (Portugal) and French translations by Gustavo Encarnação — CS7ATL.
   pt:{
+    "rssi_cal_capture":"Ler dados do recetor",
+    "rssi_cal_unavailable":"Não há dados SDR atuais. Inicia o recetor antes de recolher os dados do perfil.",
+    "rssi_cal_captured":"Dados do recetor recolhidos. Introduz o nome do recetor e os pontos de referência medidos antes de guardar.",
+
+    "rssi_cal_title":"Calibração RSSI (dBm)",
+    "rssi_cal_help":"Usa referências medidas à entrada RF deste recetor. A estação calcula os dBm localmente e envia-os por Brew. Vazio desativa a calibração. O dispositivo, a antena, os ganhos, a frequência e a taxa de amostragem têm de coincidir; sem extrapolação.",
+    "rssi_cal_profile":"Perfil de calibração do recetor (JSON)",
+    "rssi_cal_guide":"Guia de calibração",
+    "rssi_cal_invalid":"Introduz um objeto JSON de calibração válido ou deixa o campo vazio.",
+    "rssi_cal_value":"RSSI de uplink calibrado",
+    "rssi_cal_missing":"Nível digital: sem calibração RF válida para esta amostra",
+
     "bts_ip": "IP da BTS",
     "offline": "DESLIGADO",
     "online": "LIGADO",
@@ -9811,6 +9842,18 @@ const LANGS={
     "confirm_clear_log": "Limpar o registo?"
 },
   fr:{
+    "rssi_cal_capture":"Lire les paramètres du récepteur",
+    "rssi_cal_unavailable":"Aucune donnée SDR actuelle. Démarrer le récepteur avant de lire les paramètres du profil.",
+    "rssi_cal_captured":"Paramètres du récepteur lus. Saisir le nom du récepteur et les points de référence mesurés avant d’enregistrer.",
+
+    "rssi_cal_title":"Étalonnage RSSI (dBm)",
+    "rssi_cal_help":"Utiliser des références mesurées à l’entrée RF de ce récepteur. La station calcule les dBm localement et les transmet par Brew. Vide désactive l’étalonnage. Le périphérique, l’antenne, les gains, la fréquence et la fréquence d’échantillonnage doivent correspondre ; aucune extrapolation.",
+    "rssi_cal_profile":"Profil d’étalonnage du récepteur (JSON)",
+    "rssi_cal_guide":"Guide d’étalonnage",
+    "rssi_cal_invalid":"Saisir un objet JSON d’étalonnage valide ou laisser vide.",
+    "rssi_cal_value":"RSSI uplink étalonné",
+    "rssi_cal_missing":"Niveau numérique : aucun étalonnage RF valide pour cet échantillon",
+
     "bts_ip": "IP de la BTS",
     "offline": "HORS LIGNE",
     "online": "EN LIGNE",
@@ -13599,8 +13642,13 @@ function handleMsg(msg){
     case 'ms_cell':
       if(state.ms[msg.issi]){state.ms[msg.issi].cell=msg.cell;renderStations();}
       break;
+    case 'ms_rssi_dbm':
+      if(state.ms[msg.issi])state.ms[msg.issi].rssi_dbm=Number.isFinite(msg.rssi_dbm)?msg.rssi_dbm:null;
+      scheduleStationsRender();
+      break;
     case 'ms_rssi':
-      if(state.ms[msg.issi]){state.ms[msg.issi].rssi_dbfs=msg.rssi_dbfs;state.ms[msg.issi]._last_seen_ts=Date.now();}
+      // A new raw sample invalidates the previous sample's optional calibration.
+      if(state.ms[msg.issi]){state.ms[msg.issi].rssi_dbfs=msg.rssi_dbfs;state.ms[msg.issi].rssi_dbm=null;state.ms[msg.issi]._last_seen_ts=Date.now();}
       scheduleStationsRender();break;
     case 'ms_groups':
       if(state.ms[msg.issi]){const cur=new Set(state.ms[msg.issi].groups||[]);(msg.groups||[]).forEach(g=>cur.add(g));state.ms[msg.issi].groups=[...cur];(state.ms[msg.issi].group_catalog||[]).forEach(g=>{if(cur.has(g.gssi))g.is_attached=true;});}
@@ -14283,7 +14331,7 @@ function renderStations(){
     return;
   }
   tb.innerHTML=ms.sort((a,b)=>a.issi-b.issi).map(m=>{
-    const r=m.rssi_dbfs,rL=r!=null?`${r.toFixed(1)} dBFS`:'—',pct=rssiPct(r),gcls=rssiGaugeClass(r);
+    const r=m.rssi_dbfs,dbm=m.rssi_dbm,rL=Number.isFinite(dbm)?`${dbm.toFixed(1)} dBm`:(r!=null?`${r.toFixed(1)} dBFS`:'—'),pct=rssiPct(r),gcls=rssiGaugeClass(r);
     // Compact groups: selected TG pill + chevron popover for affiliates (same UX as LST roster).
     const grps=typeof lstGroupsCell==='function'?lstGroupsCell(m):'<span class="badge badge-dim">—</span>';
     const ls=m._last_seen_ts?Math.floor((Date.now()-m._last_seen_ts)/1000):m.last_seen_secs_ago;
@@ -14291,7 +14339,7 @@ function renderStations(){
     return`<tr${emg?' class="row-emergency"':''} data-ms-issi="${m.issi}">
       <td>${emg?'<span class="badge badge-emergency">'+t('call_emergency')+'</span> ':''}${idCell(m.issi)}${m.cell!=null?' <span class="badge badge-dim" title="'+escHtmlAttr(t('cells_cell',{n:m.cell}))+'">C'+m.cell+'</span>':''}</td><td>${grps}</td>
       <td class="col-mobile-hide">${eeLabel(m.energy_saving_mode||0)}</td>
-      <td><div class="gauge ${gcls}"><div class="gauge-track"><div class="gauge-fill" style="width:${pct}%"></div></div><span class="gauge-value">${rL}</span></div></td>
+      <td><div class="gauge ${gcls}"><div class="gauge-track"><div class="gauge-fill" style="width:${pct}%"></div></div><span class="gauge-value" title="${escHtmlAttr(Number.isFinite(dbm)?t('rssi_cal_value')+' · '+(r!=null?r.toFixed(1)+' dBFS':''):t('rssi_cal_missing'))}">${rL}</span></div></td>
       <td>${secCell(m)}</td>
       <td><span class="pill pill-ok">${t('online_badge')}</span></td>
       <td class="col-mobile-hide">${lastSeenLabel(ls)}</td>
@@ -15361,6 +15409,22 @@ if(!window.__cfgHelpBound){
   window.addEventListener('resize',closeCfgHelp);
 }
 
+async function captureRssiReceiver(){
+  try{
+    const response=await fetch('/api/rssi-calibration',{credentials:'same-origin'});
+    if(!response.ok)throw new Error(t('rssi_cal_unavailable'));
+    const data=await response.json();
+    const settings=(data.receivers||[]).find(r=>r.cell===0)?.settings;
+    if(!settings||!settings.device||!settings.rx_antenna||!settings.rx_gains)throw new Error(t('rssi_cal_unavailable'));
+    let previous={};try{previous=JSON.parse(vcStr('vc-rssi-calibration')||'{}');}catch(_){}
+    const {calibration_active,...profile}=settings;
+    profile.receiver=previous.receiver||settings.receiver||'';
+    profile.points=[];
+    vcSet('vc-rssi-calibration',JSON.stringify(profile,null,2));
+    vcMsg('vc-rf-msg',t('rssi_cal_captured'),true);
+  }catch(e){vcMsg('vc-rf-msg',String(e?.message||e),false);}
+}
+
 function collectVisualConfig(){
   const device=vcStr('vc-device');
   const fam=hwRfFamily(device);
@@ -15384,6 +15448,13 @@ function collectVisualConfig(){
   const rxAnt=vcStr('vc-rx-ant'); if(rxAnt)soapysdr.rx_antenna=rxAnt;
   const txAnt=vcStr('vc-tx-ant'); if(txAnt)soapysdr.tx_antenna=txAnt;
   Object.assign(soapysdr,gains);
+  const calibrationText=vcStr('vc-rssi-calibration');
+  if(calibrationText){
+    let profile;try{profile=JSON.parse(calibrationText);}catch(_){throw new Error(t('rssi_cal_invalid'));}
+    if(!profile||typeof profile!=='object'||Array.isArray(profile))throw new Error(t('rssi_cal_invalid'));
+    soapysdr.rssi_calibration=profile;
+  }
+
   const cell_info={
     freq_band:vcNum('vc-freq-band')??4,
     main_carrier:vcNum('vc-main-carrier'),
@@ -15446,6 +15517,7 @@ function collectVisualConfig(){
 function fillVisualConfig(d,opts){
   opts=opts||{};
   const soapy=d?.phy_io?.soapysdr||{};
+  vcSet('vc-rssi-calibration',soapy.rssi_calibration?JSON.stringify(soapy.rssi_calibration,null,2):'');
   vcSet('vc-tx-freq',hzToMhzDisplay(soapy.tx_freq)); vcSet('vc-rx-freq',hzToMhzDisplay(soapy.rx_freq));
   vcSet('vc-ppm',soapy.ppm_err!=null&&soapy.ppm_err!==''?formatHwRfNumber(Number(soapy.ppm_err)):0); vcSet('vc-device',soapy.device||'');
   updateHwRfUi(soapy.rx_antenna||'',soapy.tx_antenna||'');
