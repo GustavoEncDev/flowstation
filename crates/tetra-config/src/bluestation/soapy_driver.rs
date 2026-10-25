@@ -166,6 +166,7 @@ mod tests {
             fs: None,
             rx_ch: None,
             tx_ch: None,
+            rssi_calibration: None,
         }
     }
 
