@@ -14,6 +14,7 @@ pub struct MsState {
     /// heard on a group call — so right after a restart all groups show as scanned, not active.
     pub selected_group: Option<u32>,
     pub rssi_dbfs: Option<f32>,
+    pub rssi_dbm: Option<f32>,
     pub registered_at: u64,
     pub last_seen_secs_ago: u64,
     pub energy_saving_mode: u8, // 0=StayAlive, 1=Eg1..7=Eg7
@@ -254,6 +255,7 @@ pub struct MsEntry {
     /// See MsState::selected_group.
     pub selected_group: Option<u32>,
     pub rssi_dbfs: Option<f32>,
+    pub rssi_dbm: Option<f32>,
     pub registered_at: Instant,
     pub last_seen: Instant,
     pub energy_saving_mode: u8,
@@ -558,6 +560,7 @@ impl DashboardStateInner {
                 group_catalog: e.group_catalog.clone(),
                 selected_group: e.selected_group,
                 rssi_dbfs: e.rssi_dbfs,
+                rssi_dbm: e.rssi_dbm,
                 registered_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
