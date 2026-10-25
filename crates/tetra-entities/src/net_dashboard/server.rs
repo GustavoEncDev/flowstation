@@ -2056,6 +2056,7 @@ impl DashboardServer {
                             group_catalog: Vec::new(),
                             selected_group: None,
                             rssi_dbfs: None,
+                            rssi_dbm: None,
                             registered_at: Instant::now(),
                             last_seen: Instant::now(),
                             energy_saving_mode: 0,
@@ -2185,7 +2186,15 @@ impl DashboardServer {
                 TelemetryEvent::MsRssi { issi, rssi_dbfs } => {
                     if let Some(e) = s.ms_map.get_mut(issi) {
                         e.rssi_dbfs = Some(*rssi_dbfs);
+                        // Telemetry is lossy: never retain an older calibrated value if
+                        // the following optional dBm event is dropped or unavailable.
+                        e.rssi_dbm = None;
                         e.last_seen = Instant::now();
+                    }
+                }
+                TelemetryEvent::MsRssiDbm { issi, rssi_dbm } => {
+                    if let Some(e) = s.ms_map.get_mut(issi) {
+                        e.rssi_dbm = rssi_dbm.filter(|v| v.is_finite());
                     }
                 }
                 TelemetryEvent::MsEnergySaving { issi, mode } => {
@@ -2663,6 +2672,7 @@ fn event_to_ws_msg(event: &TelemetryEvent) -> Option<String> {
             "detail":status.detail,
         }),
         TelemetryEvent::MsRssi { issi, rssi_dbfs } => serde_json::json!({"type":"ms_rssi","issi":issi,"rssi_dbfs":rssi_dbfs}),
+        TelemetryEvent::MsRssiDbm { issi, rssi_dbm } => serde_json::json!({"type":"ms_rssi_dbm","issi":issi,"rssi_dbm":rssi_dbm}),
         TelemetryEvent::MsEnergySaving { issi, mode } => serde_json::json!({"type":"ms_energy_saving","issi":issi,"mode":mode}),
         TelemetryEvent::MsSecurity { issi, authenticated, encrypting } => {
             serde_json::json!({"type":"ms_security","issi":issi,"authenticated":authenticated,"encrypting":encrypting})
@@ -3941,6 +3951,9 @@ fn handle_connection(
     } else if req_line.contains("POST /api/dashboard-auth") {
         let (inner, body_str) = read_post_body(stream);
         serve_dashboard_auth_post(inner, &auth, &sessions, &config_path, &body_str);
+    } else if req_line.starts_with("GET /api/rssi-calibration ") {
+        drain_http_headers(&mut stream);
+        http_json_response(stream, 200, &crate::rssi::receiver_snapshot().to_string());
     } else if req_line.contains("GET /api/dashboard-ports") {
         let mut s = stream;
         drain_http_headers(&mut s);
@@ -9094,6 +9107,30 @@ dest_issi = 2632585
             "Open — all ISSI may register"
         );
         assert_eq!(normalize_mojibake_html("waitingÃ¢â‚¬Â¦"), "waiting…");
+    }
+
+    #[test]
+    fn new_raw_rssi_clears_calibration_when_optional_event_is_lost() {
+        let server = DashboardServer::new("/tmp/fs_rssi_fallback_test_config.toml".to_string());
+        let sample = || {
+            let ms = server.state.read().unwrap().snapshot_ms();
+            let ms = ms.iter().find(|m| m.issi == 2683283).unwrap();
+            (ms.rssi_dbfs, ms.rssi_dbm)
+        };
+        server.handle_telemetry(TelemetryEvent::MsRegistration { issi: 2683283 });
+        server.handle_telemetry(TelemetryEvent::MsRssi { issi: 2683283, rssi_dbfs: -50.0 });
+        server.handle_telemetry(TelemetryEvent::MsRssiDbm { issi: 2683283, rssi_dbm: Some(-90.0) });
+        assert_eq!(sample(), (Some(-50.0), Some(-90.0)));
+
+        // Simulate an out-of-range sample followed by a dropped dBm(None) event.
+        server.handle_telemetry(TelemetryEvent::MsRssi { issi: 2683283, rssi_dbfs: -80.0 });
+        assert_eq!(sample(), (Some(-80.0), None));
+
+        server.handle_telemetry(TelemetryEvent::MsRssi { issi: 2683283, rssi_dbfs: -45.0 });
+        server.handle_telemetry(TelemetryEvent::MsRssiDbm { issi: 2683283, rssi_dbm: Some(-85.0) });
+        assert_eq!(sample(), (Some(-45.0), Some(-85.0)));
+        server.handle_telemetry(TelemetryEvent::MsRssiDbm { issi: 2683283, rssi_dbm: None });
+        assert_eq!(sample(), (Some(-45.0), None));
     }
 
     /// Authentication completes before the registration that creates the MS row, and the
