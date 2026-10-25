@@ -34,6 +34,8 @@ pub struct CfgSoapySdr {
     pub rx_ch: Option<usize>,
     /// TX channel number
     pub tx_ch: Option<usize>,
+    /// Optional measured calibration for this physical receiver.
+    pub rssi_calibration: Option<super::rssi_calibration::RssiCalibration>,
 }
 
 impl CfgSoapySdr {
@@ -90,6 +92,7 @@ pub struct SoapySdrDto {
     pub sample_rate: Option<f64>,
     pub rx_channel: Option<usize>,
     pub tx_channel: Option<usize>,
+    pub rssi_calibration: Option<super::rssi_calibration::RssiCalibration>,
 
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
