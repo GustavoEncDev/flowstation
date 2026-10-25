@@ -757,7 +757,16 @@ pub const BREW_SERVICE_RSSI: u8 = 0x10;
 /// Service type 0x10 is used to distinguish RSSI messages from subscriber
 /// query messages (type 0x01). The JSON is NULL-terminated per SmartConnect convention.
 pub fn build_service_rssi(issi: u32, rssi_dbfs: f32) -> Vec<u8> {
-    let json = format!("{{\"issi\":{},\"rssi_dbfs\":{:.1}}}", issi, rssi_dbfs);
+    build_service_rssi_calibrated(issi, rssi_dbfs, None)
+}
+
+/// Optional dBm extension, calculated at the receiving station. Legacy fields and framing stay intact.
+pub fn build_service_rssi_calibrated(issi: u32, rssi_dbfs: f32, rssi_dbm: Option<f32>) -> Vec<u8> {
+    let json = if let Some(dbm) = rssi_dbm.filter(|v| v.is_finite()) {
+        format!("{{\"issi\":{},\"rssi_dbfs\":{:.1},\"rssi_dbm\":{:.1}}}", issi, rssi_dbfs, dbm)
+    } else {
+        format!("{{\"issi\":{},\"rssi_dbfs\":{:.1}}}", issi, rssi_dbfs)
+    };
     let mut buf = Vec::with_capacity(3 + json.len());
     buf.push(BREW_CLASS_SERVICE);
     buf.push(BREW_SERVICE_RSSI);
@@ -1019,4 +1028,18 @@ mod tests {
             panic!("Expected Frame message");
         }
     }
+    #[test]
+    fn calibrated_rssi_keeps_legacy_framing_and_adds_dbm_only_when_valid() {
+        let legacy = build_service_rssi(2683283, -42.3);
+        assert_eq!(&legacy[..2], &[0xf4, 0x10]);
+        assert_eq!(legacy.last(), Some(&0));
+        assert_eq!(std::str::from_utf8(&legacy[2..legacy.len()-1]).unwrap(),
+            "{\"issi\":2683283,\"rssi_dbfs\":-42.3}");
+        let calibrated = build_service_rssi_calibrated(2683283, -42.3, Some(-92.3));
+        let json: serde_json::Value = serde_json::from_slice(&calibrated[2..calibrated.len()-1]).unwrap();
+        assert_eq!(json["rssi_dbm"], -92.3);
+        assert_eq!(json["rssi_dbfs"], -42.3);
+        assert_eq!(legacy, build_service_rssi_calibrated(2683283, -42.3, Some(f32::NAN)));
+    }
+
 }
