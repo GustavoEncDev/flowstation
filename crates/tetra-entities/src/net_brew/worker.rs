@@ -199,7 +199,7 @@ pub enum BrewCommand {
     SendDtmf { uuid: Uuid, length_bits: u16, data: Vec<u8> },
 
     /// MM → Brew: send RSSI measurement for an MS to the Brew server (Service 0xf4)
-    SendRssiUpdate { issi: u32, rssi_dbfs: f32 },
+    SendRssiUpdate { issi: u32, rssi_dbfs: f32, rssi_dbm: Option<f32> },
 
     /// Disconnect gracefully
     Disconnect,
@@ -609,8 +609,8 @@ impl<T: NetworkTransport> BrewWorker<T> {
                             tracing::debug!("Brew: sent DTMF uuid={} bits={}", uuid, length_bits);
                         }
                     }
-                    BrewCommand::SendRssiUpdate { issi, rssi_dbfs } => {
-                        let msg = build_service_rssi(issi, rssi_dbfs);
+                    BrewCommand::SendRssiUpdate { issi, rssi_dbfs, rssi_dbm } => {
+                        let msg = build_service_rssi_calibrated(issi, rssi_dbfs, rssi_dbm);
                         if let Err(e) = self.transport.send_reliable(&msg) {
                             tracing::error!("BrewWorker: failed to send RSSI update for ISSI {}: {}", issi, e);
                         } else {
